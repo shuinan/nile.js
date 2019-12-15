@@ -2668,9 +2668,7 @@ var Broadcaster = function () {
       this.$video.defaultMuted = true;
 
       // allows you to see yourself while recording
-      var createSrc = window.URL ? window.URL.createObjectURL : function (stream) {
-        return stream;
-      };
+      var createSrc = window.URL ? window.URL.createObjectURL : function (stream) {        return stream;      };      
 
       // // creates a new instance of torrent so that user is able to seed the video/webm file
       // let was1 = this.was1;
@@ -2721,7 +2719,8 @@ var Broadcaster = function () {
           videoStream = stream.getTracks();
 
           // play back the recording to the broadcaster
-          $video.src = createSrc(stream);
+          //$video.src = createSrc(stream);
+          $video.srcObject = stream;
           $video.play();
         }
 
