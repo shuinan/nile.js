@@ -1,6 +1,11 @@
 // store refs to connected clients' RTC connections
 const clientRTCConns = {};
 
+function PeerInfo (peerId, socket) {
+  this.peerId = peerId;
+  this.socket = socket;
+}
+
 function socketController(server, socketLimit) {
   /**
    * server: Node Server
@@ -9,6 +14,9 @@ function socketController(server, socketLimit) {
   this.io = require('socket.io')(server);
   // will store socket connections to Viewers
   this.sockets = []; 
+  
+  /// all peer in this lalm.
+  this.peers = new Map();
 
   this.io.on('connection', (socket) => {
     console.log('New connection:', socket.id);
@@ -75,6 +83,42 @@ function socketController(server, socketLimit) {
       self.sockets = self.sockets.filter(keptSocket => this.id !== keptSocket.id);
       console.log('Updated sockets:', self.sockets.map(socket => socket.id));
     });
+
+
+
+    socket.on('signal', (peerId, data) {
+      console.log('signal to peer: ', peerId);
+      let peer = peers.get(peerId);            
+      peer && peer.socket.emit('signal', data);
+    });
+
+    socket.on('create', (peerId, almId) => {
+      console.log(peerId, 'create a lalm');
+
+      peers.insert(peerId);
+
+      /// only support a lalm by now.
+      socket.emit('createResp', 'success');
+    });
+    
+    socket.on('join', (peerId, almId) => {
+      console.log(peerId, 'join a lalm');
+     
+      /// only support a lalm by now.
+      let layNo = 1;      
+      socket.emit('joinResp', 'success', layNo, [...this.peers.keys()]);
+
+      let pi = new PeerInfo;
+      pi.peers = peerId;
+      pi.socket = socket;
+      peers.set(peerId, pi);
+    });
+
+    socket.on('quit', (peerId) {
+      console.log('quit, for peer: ', peerId);
+      peers.delete(peerId);                  
+    });
+
   });
 }
 

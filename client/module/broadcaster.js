@@ -21,37 +21,34 @@ class Broadcaster {
 
     this.$video = document.getElementById('broadcaster');
 
-    this.startSeeding = this.startSeeding.bind(this);
-
     this.startStream();
   }
 
-
+  /// create lalm
   startStream() {
-    const _recordInterval = this.recordInterval;
-    const startSeeding = this.startSeeding;
+    const _recordInterval = this.recordInterval;    
     let videoStream = this.videoStream;
     let $video = this.$video;
 
-    let torrentInfo = {
-      'magnetURI1': 0,
-      'magnetURI2': 0,
-      'magnetURI3': 0,
-      'was1': false,
-      'was2': false
-    }
 
-    let broadcaster;
+    let almBroadcaster;
+    let dataNo = 1;
+
     // mute audio
     this.$video.defaultMuted = true;
 
-    // // creates a new instance of torrent so that user is able to seed the video/webm file
-    // let was1 = this.was1;
-    // let was2 = this.was1;
 
     // when pressing the play button, start recording
     document.getElementById(`${this.startStreamID}`).addEventListener('click', function () {
-      broadcaster = new WebTorrent();
+      almBroadcaster = new Lalm();
+
+      // check for if an error occurs, if it does, garbage collection and return error
+      almBroadcaster.on('error', function (err) {
+        console.log('lalm has encountered an error', err)
+      })
+
+      almBroadcaster.create("demo-alm");
+
 
       var mediaConstraints = {
         audio: true,
@@ -69,31 +66,15 @@ class Broadcaster {
 
         // every _recordInterval, make a new torrent file and start seeding it
         mediaRecorder.ondataavailable = function (blob) {
-
-          const file = new File([blob], 'nilejs.webm', {
-            type: 'video/webm'
-          });
-
-          // /* So that there is no delay in streaming between torrents, this section is going to 
-          //  * make instances of webtorrent and then alternate the seeding between the two
-          //  * once each seed is done, destroy the seed and initiate the next one
-          // */
-          if (torrentInfo.was1 && torrentInfo.was2) {
-            startSeeding(file, 'magnetURI3', '3', broadcaster, torrentInfo);
-            torrentInfo.was1 = torrentInfo.was2 = false;
-          } else if (torrentInfo.was1) {
-            startSeeding(file, 'magnetURI2', '2', broadcaster, torrentInfo);
-            torrentInfo.was2 = true;
-          } else {
-            startSeeding(file, 'magnetURI1', '1', broadcaster, torrentInfo);
-            torrentInfo.was1 = true;
-          }
+          // make unique no for this blob 
+          blob.seq = dataNo++;
+          almBroadcaster.send(blob);          
         };
 
         // retrieve the devices that are being used to record
         videoStream = stream.getTracks();
 
-        // play back the recording to the broadcaster
+        // play back the recording to the almBroadcaster
         try{
           $video.src = window.URL.createObjectURL(stream);
         }catch(e){
@@ -109,15 +90,6 @@ class Broadcaster {
 
     // when the user pauses the video, stop the stream and send data to server
     document.getElementById(`${this.stopStreamID}`).addEventListener('click', function () {
-      // resets all of the values to starting values
-      torrentInfo = {
-        'magnetURI1': 0,
-        'magnetURI2': 0,
-        'magnetURI3': 0,
-        'was1': false,
-        'was2': false
-      }
-
       // Pause the video
       $video.pause();
 
@@ -125,32 +97,12 @@ class Broadcaster {
       videoStream.forEach((stream) => stream.stop());
 
       // destroys the broadcasting client and starts back at the beginning
-      broadcaster.destroy(function () {
-        console.log('All torrents destroyed')
+      almBroadcaster.destroy(function () {
+        console.log('All stream destroyed')
       })
     });
   }
 
-  startSeeding(file, currMagnet, castNum, broadcaster, torrentInfo) {
-    // remove the torrent if it is currently seeding
-    if (torrentInfo[currMagnet]) {
-      broadcaster.remove(torrentInfo[currMagnet], () => {
-        console.log(`magnet ${castNum} removed`)
-      });
-    }
-
-    // start seeding the new torrent
-    broadcaster.seed(file, (torrent) => {
-      torrentInfo[currMagnet] = torrent.magnetURI;
-      console.log(`broadcaster ${castNum} is seeding `, torrent.magnetURI)
-      this.sendMagnetToServer(torrent.magnetURI);
-    });
-
-    // check for if an error occurs, if it does, garbage collection and return error
-    broadcaster.on('error', function (err) {
-      console.log('webtorrents has encountered an error', err)
-    })
-  }
 
   // send magnet to server
   sendMagnetToServer(magnetURI) {

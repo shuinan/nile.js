@@ -1,17 +1,56 @@
 import Message from './message';
+import Peer from 'simple-peer';
 
 // set peer connection to Mozilla PeerConnection if in Firefox
 RTCPeerConnection = RTCPeerConnection || mozRTCPeerConnection;
 
+class PeerNode {
+  constructor(id, layerNo, isInitiator, socket, onData) {
+    this.socket_ = socket;
+    this.id_ = id;
+    this.layerNo_ = layerNo;
+    this.isInitiator_ = isInitiator;
+    this.dataChannelIsOk_ = false;     
+
+    this.simplePeer_ = new SimplePeer({ initiator: !isInitiator });
+    this.simplePeer_.on('signal', data => {
+      // send signal to this peer by server(sock.io)
+      this.sendBySocket('signal', this.id_, data);
+      //peer2.signal(data)
+    });
+
+    this.simplePeer_.on('connect', () => {
+      this.dataChannelIsOk_ = true;
+    });
+    this.simplePeer_.on('data', onData);
+    this.simplePeer_.on('error', err => console.log('error', err));
+  }
+
+  
+  // send message by socket.io  to server
+  sendBySocket(event, ...args) {
+    this.socket_.emit(event, ...args);
+  }
+
+
+  /// relied send mode
+  sendMessage(msg) {
+    this.simplePeer_.send(msg);
+  }
+  /// unrelied send mode
+  sendData(data) {
+    this.simplePeer_.send(data);
+  }
+}
 
 /**
  * Wrapper class for RTC connection between parent and child viewers
  */
 class Lalm {
   constructor(
-    socket,
-    isRoot,    
-    opts
+    socket,    
+    opts,
+    onData
   ) {
     this.opts_ = opts;
     /*opts: {
@@ -21,78 +60,48 @@ class Lalm {
       dht: Boolean|Object, // Enable DHT (default=true), or options object for DHT 
       }
 */
+    this.almId_;    
+
     // indicates whether this node is the root connecting to the server
-    this.isRoot_ = isRoot;
+    this.isRoot_;
     
-    // Peer's socket ID
+    // Peer's node ID
     this.peerId_;
-
-    this.almId_;
-
-    // creates func to clear client connection when it disconnects
-    this._createIceDisconnHandler = (connName) => () => {
-    // have variable 
-    // close client's RTC Peer Connection
-
-      console.log('ICE disconnecting on:', connName);
-      if (this[connName]) {
-        this[connName].closeRTC();
-        // clear connection
-        this[connName] = null;
-
-        // open socket if not already open and if from parent
-        if (connName === 'connToParent') this.socket.disconnected && this.socket.open();
-      }
-    };
-
-    // telling neighboring clients to reconnect
-    const reconnectNeighbors = (event) => {
-      // sending disconnecting message to each client
-      for (let conn of ['connToParent', 'connToChild']) {
-        if (this[conn]) {
-          // if the connection exists, use opposite connection name
-          // for example, if sending to parent on connToParent,
-          // parent would be receiving message on connToChild so we'd use connToChild
-          const oppConn = (conn === 'connToParent') ? 'connToChild' : 'connToParent';
-          // send disconnection message telling peer on other end to disable the connection between this and them
-
-          this[conn].sendMessage('disconnecting', {
-            // will allow disconnected root to reassign root role to next client
-            isRoot: this.isRoot,
-            // tells neighboring clients which connection to disconnect
-            disconnector: oppConn,
-          });
-        }
-      };
-    };
-
-    // event handlers to pass to child client's DataChannel connection
-    const childEventHandlers = {
-      disconnecting: this._reconnectWithNeighbor.bind(this),
-    };
+    
+    this.pusher_;// = new PeerNode();
+    this.backupPusher_;// = new PeerNode();  
+    this.partners_ = new Map(); /// id, PeerNode
+    //this.
+    this.receivers_ = new Set();  /// PeerNode
 
     this.socket_ = io.connect();
-    addedIceServers_ = [];
-    // sending ICE disconnection handler
-    // connToChild b/c this client will be a child for the parent it's connecting to
-    const iceDisconnHandlerForParent = this._createIceDisconnHandler('connToParent');
+  
 
-    // create child connection
-    this.dataChannel_ = new ViewerConnection(
-      this.socket,
-      this.isRoot,
-      childEventHandlers,
-      this.addedIceServers,
-      iceDisconnHandlerForChild
-    );
+    /// cache data
+    this.datas_ = new Map();  /// seq: data
   }
   
-  create() {    
-    this.sendBySocket();
+  create(almId) {    
+    this.almId_ = almId;
+    this.sendBySocket('create', peerId_, almId);
+    isRoot_ = true;
+    this.socket.on('createResp', this._onCreate.bind(this));
+  }
+  _onCreate(ret) {
+    if (ret == 'success') {
+
+    }
   }
 
   join(almId) {
-
+    this.almId_ = almId;
+    isRoot_ = false;
+    this.socket.on('joinResp', this._onJoin.bind(this));
+  }
+  _onJoin(ret, layerNo, members) {
+    if (ret == 'success') {
+      
+    }
   }
   
   getId() {
@@ -103,7 +112,27 @@ class Lalm {
   //client.on('error', function (err) {})
 
   quit(callback) {
-    callback && callback(err);
+    allback && callback();
+
+    for (let peer of this.receivers_.values()) {
+      peer.sendMessage('quit');
+    }
+
+    /// tell rp(server)
+    this.sendBySocket('quit');
+  }
+
+  _onReceivedData(blob) 
+  {
+    /// chceck repeat;
+    
+    /// send to app;
+    onData_ && onData(blob);
+
+    /// send to receivers
+    for (let peer of this.receivers_.values()) {
+      peer.send(data);
+    }
   }
 
   // Total download speed , in bytes/sec.
@@ -114,6 +143,11 @@ class Lalm {
 
   logError(err) {
     console.error(err);
+  }
+
+  // send message by socket.io  to server
+  sendBySocket(event, ...args) {
+    this.socket_.emit(event, ...args);
   }
 }
 
