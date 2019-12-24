@@ -31,6 +31,7 @@
     "utf-8-validate": "^5.0.2",
     "util": "^0.10.3",
     "simple-peer": "^5.4.3",
+    "wolfy87-eventemitter": "^5.2.8",
     "webrtc-adapter": "^3.4.0",
     "webtorrent": "^0.107.17"
   },

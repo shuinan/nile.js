@@ -2,6 +2,8 @@
 // import * as MediaStreamRecorder from 'msr';
 import WebTorrent from './webtorrent.min.js';
 import MediaStreamRecorder from 'msr';
+import io from 'socket.io-client';
+import Lalm from './lalm.js';
 
 class Broadcaster {
   constructor(
@@ -17,6 +19,8 @@ class Broadcaster {
 
     this.videoStream = null;
 
+    this.socket = io.connect();
+    
     this.createBroadcast();
 
     this.$video = document.getElementById('broadcaster');
@@ -30,17 +34,15 @@ class Broadcaster {
     let videoStream = this.videoStream;
     let $video = this.$video;
 
-
     let almBroadcaster;
     let dataNo = 1;
 
     // mute audio
     this.$video.defaultMuted = true;
 
-
     // when pressing the play button, start recording
     document.getElementById(`${this.startStreamID}`).addEventListener('click', function () {
-      almBroadcaster = new Lalm();
+      almBroadcaster = new Lalm(this.socket, {peerId: "broadcaster" + Math.round(Math.random() * 100000)});
 
       // check for if an error occurs, if it does, garbage collection and return error
       almBroadcaster.on('error', function (err) {
@@ -48,7 +50,8 @@ class Broadcaster {
       })
 
       almBroadcaster.create("demo-alm");
-
+      almBroadcaster.on('create', ret => console.log('Create result: ', ret) );
+      almBroadcaster.on('error', err => console.log('Have error: ', err) );
 
       var mediaConstraints = {
         audio: true,
@@ -97,30 +100,12 @@ class Broadcaster {
       videoStream.forEach((stream) => stream.stop());
 
       // destroys the broadcasting client and starts back at the beginning
-      almBroadcaster.destroy(function () {
-        console.log('All stream destroyed')
+      almBroadcaster.quit(function () {
+        console.log('Stop broadcast.')
       })
     });
   }
 
-
-  // send magnet to server
-  sendMagnetToServer(magnetURI) {
-    // send to server
-    let xhr = new XMLHttpRequest();
-
-    xhr.open('POST', '/magnet', true);
-
-    xhr.onreadystatechange = function () {
-      if (this.status === 200) {
-        console.log('Magnet Emitted')
-      } else {
-        console.log('Emit Failed')
-      }
-    }
-    xhr.setRequestHeader("Content-type", "application/json");
-    xhr.send(JSON.stringify({ 'magnetURI': magnetURI }));
-  }
 
   createBroadcast() {
     let video = document.createElement('video');

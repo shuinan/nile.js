@@ -4,6 +4,7 @@ const clientRTCConns = {};
 function PeerInfo (peerId, socket) {
   this.peerId = peerId;
   this.socket = socket;
+  this.layNo;
 }
 
 function socketController(server, socketLimit) {
@@ -86,16 +87,20 @@ function socketController(server, socketLimit) {
 
 
 
-    socket.on('signal', (peerId, data) {
+    socket.on('signal', (from, to, data) => {
       console.log('signal to peer: ', peerId);
-      let peer = peers.get(peerId);            
-      peer && peer.socket.emit('signal', data);
+      let peer = peers.get(to);            
+      peer && peer.socket.emit('signal', from, data);
     });
 
     socket.on('create', (peerId, almId) => {
       console.log(peerId, 'create a lalm');
-
-      peers.insert(peerId);
+      
+      let pi = new PeerInfo;
+      pi.peerId = peerId;
+      pi.socket = socket;
+      pi.layNo = 0;
+      peers.set(peerId, pi);
 
       /// only support a lalm by now.
       socket.emit('createResp', 'success');
@@ -109,16 +114,16 @@ function socketController(server, socketLimit) {
       socket.emit('joinResp', 'success', layNo, [...this.peers.keys()]);
 
       let pi = new PeerInfo;
-      pi.peers = peerId;
+      pi.peerId = peerId;
       pi.socket = socket;
+      pi.layNo = layNo;
       peers.set(peerId, pi);
     });
 
-    socket.on('quit', (peerId) {
+    socket.on('quit', (peerId) => {
       console.log('quit, for peer: ', peerId);
       peers.delete(peerId);                  
     });
-
   });
 }
 
