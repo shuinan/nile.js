@@ -106,7 +106,6 @@ class Broadcaster {
     });
   }
 
-
   createBroadcast() {
     let video = document.createElement('video');
     video.setAttribute('id', 'broadcaster');

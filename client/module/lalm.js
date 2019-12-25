@@ -79,11 +79,7 @@ class PeerNode {
  *      'error', err
  *      'data', blob
  */
-class Lalm extends EventEmitter {
-    total = {
-        downloaded: 0,
-        uploaded: 0
-    };
+class Lalm extends EventEmitter {  
 
     constructor(socket, opts = {}) {
         this.opts_ = opts;
@@ -98,6 +94,11 @@ class Lalm extends EventEmitter {
 
         // indicates whether this node is the root connecting to the server
         this.isRoot_;
+
+        this.total = {
+            downloaded: 0,
+            uploaded: 0
+        };
 
         // Peer's node ID
         if (typeof opts.peerId === "string") {
@@ -365,7 +366,14 @@ class Lalm extends EventEmitter {
     downloadSpeed() {}
     // Total upload speed , in bytes/sec.
     uploadSpeed() {}
+    downloaded() {
+        return this.total.downloaded;
+    }
+    uploaded() {
+        return this.total.uploaded;
+    }
 
+    
     logError(err) {
         console.error(err);
     }

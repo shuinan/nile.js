@@ -63,8 +63,8 @@ class Viewer {
       this.$play1.src = window.URL.createObjectURL(data);
   
       // appends total uploaded to the value      
-      this.total.uploaded = this.almClient.total.uploaded;
-      this.total.downloaded = this.almClient.total.downloaded;
+      this.total.uploaded = this.almClient.uploaded();
+      this.total.downloaded = this.almClient.downloaded();
       
       // Trigger statistics refresh
       // setInterval(onProgress(torrent), 500);   
@@ -81,10 +81,9 @@ class Viewer {
     
     this.socket.on('disconnect', () => {});
   }
-
-//      this.connToChild.sendMessage('offer', { callerId, offer });
+  
    
-    // return the totals upload/download
+   // return the totals upload/download
   returnTotals() {
     return this.total;
   }
