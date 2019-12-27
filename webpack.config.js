@@ -18,15 +18,15 @@ module.exports = {
     umdNamedDefine: true
   },
   module: {
-    loaders: [
+    rules: [
       {
         test: /\.js$/,
-        loader: 'babel-loader',
-        options: {
-          presets: [
-            ['es2015']
-          ]
-        }
+        use: {
+            loader: 'babel-loader',
+            options: {}
+        },
+        // 排除不被应用编译
+        exclude: '/node_modules/'       
       }
     ]
   },

@@ -42,54 +42,22 @@ function socketController(server, socketLimit) {
     // so that 'this' in socket handlers can access socket
     const self = this;
 
-    // callee receives offer from new client
-    socket.on('offer', function (offer) {
-      // get socket id to send offer to
-      const calleeSocket = getTargetSocket(self.sockets);
-      const calleeId = calleeSocket && calleeSocket.id;
 
-      // emit to root of client chain
-      // callee socket's id maintained throughout signaling
-      if (calleeId) {
-        // get this socket's id
-        const callerId = this.id;
-        console.log('Emitting offer to callee:', calleeId);
-        socket.to(calleeId).emit('offer', {
-          callerId: this.id, 
-          offer,
-        });
-      }
+    // 这里监听 disconnect，就可以知道谁断开连接了
+    socket.on('disconnect',  () => {
+        for (var value of this.peers.values()) {        
+            if (value.socket == socket) {
+                console.log('clear peer for quit socket, peer: ', value.peerId);
+                this.peers.delete(value.peerId);
+                return;
+            }
+        }
     });
-
-    // caller receives answer from callee
-    socket.on('answer', function (callerId, answer) {
-      // emit this (callee) socket's id and answer to root of client chain
-      // callee socket's id maintained throughout signaling
-      console.log('Emitting answer to caller:', callerId);
-      socket.to(callerId).emit('answer', {
-        // MAKE TO: calleeId: this.id,
-        calleeId: this.id,
-        answer,
-      });
-    });
-
-    // send peers in a WebRTC connection new ICE candidates
-    socket.on('candidate', (peerId, candidate) => {
-      console.log('Emitting candidate to peer:', peerId); 
-      socket.to(peerId).emit('candidate', candidate);
-    });
-
-    socket.on('disconnect', function() {
-      console.log(this.id, 'disconnected');
-      self.sockets = self.sockets.filter(keptSocket => this.id !== keptSocket.id);
-      console.log('Updated sockets:', self.sockets.map(socket => socket.id));
-    });
-
 
 
     socket.on('signal', (from, to, data) => {
-      console.log('signal to peer: ', peerId);
-      let peer = peers.get(to);            
+      console.log('signal from ' + from + ' to ', to);
+      let peer = this.peers.get(to);            
       peer && peer.socket.emit('signal', from, data);
     });
 
@@ -100,7 +68,7 @@ function socketController(server, socketLimit) {
       pi.peerId = peerId;
       pi.socket = socket;
       pi.layNo = 0;
-      peers.set(peerId, pi);
+      this.peers.set(peerId, pi);
 
       /// only support a lalm by now.
       socket.emit('createResp', 'success');
@@ -117,12 +85,14 @@ function socketController(server, socketLimit) {
       pi.peerId = peerId;
       pi.socket = socket;
       pi.layNo = layNo;
-      peers.set(peerId, pi);
+      this.peers.set(peerId, pi);
     });
 
+    
+    /// send by peer node when quit.
     socket.on('quit', (peerId) => {
       console.log('quit, for peer: ', peerId);
-      peers.delete(peerId);                  
+      this.peers.delete(peerId);                  
     });
   });
 }

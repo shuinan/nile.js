@@ -20,6 +20,8 @@ class Broadcaster {
     this.videoStream = null;
 
     this.socket = io.connect();
+
+    this.selfPeerId = "broadcaster" + Math.round(Math.random() * 100000);
     
     this.createBroadcast();
 
@@ -41,8 +43,8 @@ class Broadcaster {
     this.$video.defaultMuted = true;
 
     // when pressing the play button, start recording
-    document.getElementById(`${this.startStreamID}`).addEventListener('click', function () {
-      almBroadcaster = new Lalm(this.socket, {peerId: "broadcaster" + Math.round(Math.random() * 100000)});
+    document.getElementById(`${this.startStreamID}`).addEventListener('click', () => {
+      almBroadcaster = new Lalm(this.socket, {peerId: this.selfPeerId});
 
       // check for if an error occurs, if it does, garbage collection and return error
       almBroadcaster.on('error', function (err) {
@@ -62,6 +64,8 @@ class Broadcaster {
       navigator.getUserMedia(mediaConstraints, onMediaSuccess, onMediaError);
 
       function onMediaSuccess(stream) {
+          console.log("start media.");
+
         let mediaRecorder = new MediaStreamRecorder(stream);
         // record a blob every _recordInterval amount of time
         mediaRecorder.start(_recordInterval);
@@ -92,7 +96,7 @@ class Broadcaster {
     })
 
     // when the user pauses the video, stop the stream and send data to server
-    document.getElementById(`${this.stopStreamID}`).addEventListener('click', function () {
+    document.getElementById(`${this.stopStreamID}`).addEventListener('click', () => {
       // Pause the video
       $video.pause();
 

@@ -32,9 +32,11 @@ class Viewer {
     this.addedIceServers = addedIceServers;
 
     this.socket = io.connect();
-    
+
+    this.selfPeerId = "viewer" + Math.round(Math.random() * 100000);
+
     // initiate new  connection
-    this.almClient = new Lalm(this.socket, {peerId: "viewer" + Math.round(Math.random() * 100000)});
+    this.almClient = new Lalm(this.socket, {peerId: this.selfPeerId});
     
     // limit of child clients per client
     this.childLimit = 1;
@@ -45,7 +47,7 @@ class Viewer {
     this.$uploaded = document.querySelector('#upoload')
 
     // create the video players on the document    
-    createViewer();    
+    this.createViewer();    
     this.$play = document.getElementById('viewer');
             
     // this.onProgress = this.onProgress.bind(this);
