@@ -62,7 +62,7 @@ class Viewer {
     this.almClient.join("demo-alm");
 
     this.almClient.on('data', (data) => {
-      this.$play1.src = window.URL.createObjectURL(data);
+      this.$play.src = window.URL.createObjectURL(data);
   
       // appends total uploaded to the value      
       this.total.uploaded = this.almClient.uploaded();

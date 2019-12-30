@@ -53,6 +53,9 @@ class PeerNode {
     getLayerNo() {
         return this.layerNo_;
     }
+    setLayerNo(layerno) {
+        this.layerNo_ = layerno;
+    }
 
     signal(data) {
         console.log("received signal");
@@ -94,6 +97,7 @@ class Lalm extends EventEmitter {
             }
         */
         this.almId_;
+        this.layerNo_ = 1;
 
         // indicates whether this node is the root connecting to the server
         this.isRoot_;
@@ -126,7 +130,7 @@ class Lalm extends EventEmitter {
         this.socket_.on("signal", (from, data) => {
             let peer = this._findPeerNode(from);
             if (!peer) {
-                console.log("Received signal from RP, can not find user: ", from);
+                console.log("Received signal from RP, create peer node for not find user: ", from);
 
                 // / if receive offer ...
                 peer = new PeerNode(
@@ -137,6 +141,8 @@ class Lalm extends EventEmitter {
                     this.peerCallbacks_
                 );
                 this.candidates_.set(from, peer);
+                console.log('find this peer:', this.candidates_.has(from));
+                console.log('onSignal,candidate size： ', this.candidates_.size);
             }
             peer.signal(data);
         });
@@ -164,28 +170,29 @@ class Lalm extends EventEmitter {
     _isPeerExisted(peer) {
         return (
             (this.pusher_ && peer == this.pusher_.getPeerId()) ||
-            (this.pubackupPusher_ &&
-                peer == this.pubackupPusher_.getPeerId()) ||
+            (this.backupPusher_ &&
+                peer == this.backupPusher_.getPeerId()) ||
             this.partners_.has(peer) ||
             this.candidates_.has(peer) ||
             this.receivers_.has(peer)
         );
     }
-    _findPeerNode(peer) {
-        if (this.pusher_ && peer == this.pusher_.getPeerId())
+    _findPeerNode(peerId) {
+        if (this.pusher_ && peerId == this.pusher_.getPeerId())
             return this.pusher_;
-        if (this.pubackupPusher_ && peer == this.pubackupPusher_.getPeerId()) {
-            return this.pubackupPusher_;
+        if (this.backupPusher_ && peerId == this.backupPusher_.getPeerId()) {
+            return this.backupPusher_;
         }
-        if (this.partners_.has(peer)) return this.partners_.get(peer);
-        if (this.candidates_.has(peer)) return this.candidates_.get(peer);
-        if (this.receivers_.has(peer)) return this.receivers_.get(peer);
+        if (this.partners_.has(peerId)) return this.partners_.get(peerId);
+        if (this.candidates_.has(peerId)) return this.candidates_.get(peerId);
+        if (this.receivers_.has(peerId)) return this.receivers_.get(peerId);
     }
 
     create(almId) {
         this.almId_ = almId;
         this.sendBySocket("create", this.selfPeeId_, almId);
         this.isRoot_ = true;
+        this.layerNo_ = 0;
         this.socket_.on("createResp", this._onCreate.bind(this));
     }
     _onCreate(ret) {
@@ -218,7 +225,7 @@ class Lalm extends EventEmitter {
                     const peerNode = new PeerNode(
                         this.selfPeeId_,
                         peer,
-                        layerNo,
+                        layerNo - 1,    /// 先给一个，以后服务器在members中应该带上，后续交换信息时确定
                         true,
                         this.peerCallbacks_
                     );
@@ -252,13 +259,16 @@ class Lalm extends EventEmitter {
     _onPeerConnect(peerId) {
         // avoid loop
         // 先安排好，后续根据响应情况来确定是否替换； 要有超时机制
+        // 发现，viewer peer connection onopen后， 对方（例如broadcast）还没有onopen，先收到对方的pushreq，后onopen
+        console.log('onopenconnect, candidate size： ', this.candidates_.size);
         if (this.candidates_.has(peerId)) {
             const peer = this.candidates_.get(peerId);
-            if (peer.getLayerNo() >= this.layerNo_) {
+            if (peer.getLayerNo() < this.layerNo_) {
                 if (!this.pusher_) {
                     // peer
                     peer.sendMessage({
                         type: "pushReq",
+                        layer: this.layerNo_,
                         startSeq: this.lastSeq_
                     });
                     this.pusher_ = peer;
@@ -268,13 +278,14 @@ class Lalm extends EventEmitter {
                     assert(!this.partners_.has(peerId));
                     this.partners_.set(peerId, peer);
                 }
+
+                this.candidates_.delete(peerId);
             }
 
             console.log(
-                "A peer with id: ${peerId}, data channel is ok, my layno is ${this.layerNo_}, candidate of layno is ",
+                `A peer with id: ${peerId}, data channel is ok, my layno is ${this.layerNo_}, candidate of layno is `,
                 peer.getLayerNo()
-            );
-            this.candidates_.delete(peerId);
+            );            
         } else {
             console.log("user is not existed, when user connect: ", peerId);
         }
@@ -284,22 +295,22 @@ class Lalm extends EventEmitter {
     }
     _onPeerReceivedMessage(from, msg) {
         const fromId = from.getPeerId();
-        console.log(`Received peer message: ${msg} from: ${fromId}`);
+        console.log(`Received peer message: ${msg.type} from: ${fromId}`);
         switch (msg.type) {
             case "quit":
                 if (this.pusher_ && from == this.pusher_) {
-                    this.pusher_ = this.pubackupPusher_;
-                } else if (
-                    this.pubackupPusher_ &&
-                    from == this.pubackupPusher_
-                ) {
-                    this.backupPusher_ = selectBackupPusher();
+                    this.pusher_ = this.backupPusher_;
+                } else if (this.backupPusher_ && from == this.backupPusher_) {                    
+                    this.backupPusher_ = null;
                 } else if (this.partners_.has(fromId)) {
                     this.partners_.delete(fromId);
                 } else if (this.candidates_.has(fromId))
                     this.candidates_.delete(fromId);
-                else if (this.receivers_.has(fromId))
+                else if (this.receivers_.has(fromId)) {
                     this.receivers_.delete(fromId);
+                }
+                this._updatePusher();
+
                 break;
 
             case "pushReq":
@@ -312,8 +323,10 @@ class Lalm extends EventEmitter {
                         info: "Is pusher"
                     });
                 } else if (this.partners_.has(fromId) || this.candidates_.has(fromId)) {
-                    if (from.getLayerNo() < this.layerNo_) {
-                        if (this.receivers_.size() > 2) {
+                    console.log(`receive push req from user: ${fromId}, layno: ${msg.layer}.`);
+                    from.setLayerNo(msg.layer);
+                    if (msg.layer >= this.layerNo_) {
+                        if (this.receivers_.size > 2) {
                             from.sendMessage({
                                 type: "pushResp",
                                 code: PUSH_RESP_NO_RESOURCE
@@ -325,11 +338,12 @@ class Lalm extends EventEmitter {
                             });
 
                             /// move to receivers
+                            console.log('add a receive: ', fromId);
                             this.receivers_.set(fromId, from);
                             this.candidates_.delete(fromId);
                             this.partners_.delete(fromId);
 
-                            // / push data from msg.startSeq from cache
+                            /// push data from msg.startSeq from cache
                         }
                     } else {
                         from.sendMessage({
@@ -338,7 +352,9 @@ class Lalm extends EventEmitter {
                         });
                     }
                 }
-                if (this.receivers_.has(from)) {
+
+                if (this.receivers_.has(fromId)) {
+                    console.log('send pushresp');
                     from.sendMessage({ type: "pushResp", code: PUSH_RESP_OK });
                 } else {
                     console.log("User is not existed when handle pushReq.");
@@ -353,20 +369,19 @@ class Lalm extends EventEmitter {
                     case PUSH_RESP_LAYER_LOW:
                     case PUSH_RESP_NO_RESOURCE:
                         if (this.pusher_ && from == this.pusher_) {
-                            this.pusher_ = this.pubackupPusher_;
-                        } else if (
-                            this.pubackupPusher_ &&
-                            from == this.pubackupPusher_
-                        ) {
-                            this.backupPusher_ = selectBackupPusher();
-                        } else if (this.partners_.has(fromId)) {
-                            //this.partners_.delete(fromId);
+                            this.pusher_ = this.backupPusher_;
+                        } else if (this.backupPusher_ && from == this.backupPusher_) {
+                            this.partners_.set(from, this.backupPusher_);
+                            this.backupPusher_ = null;
                         } else {
                             console.log(
                                 "send push req at invalid peer ",
                                 fromId
                             );
                         }
+
+                        _updatePusher();
+
                         break;
                 }
                 break;
@@ -374,26 +389,82 @@ class Lalm extends EventEmitter {
             default:
         }
     }
-    _onPeerReceivedData(from, blob) {
+    _onPeerReceivedData(from, data) {
         // / chceck repeat;
-        console.log("Received data with seq: ", blob.seq);
+        ///console.log(`Received data from ${from} with seq: `, blob.seq);
+        console.log('received data');
 
-        // / send to app;
+        // / send to app; 
+        var blob = new Blob([data], {type: "video/webm"});       
+///        this.emit("data", new Blob([buf], {type:'video/webm'}));
         this.emit("data", blob);
 
-        this.send(blob);
-    }
-
-    send(data) {
         // 以后考虑乱序的情况，需要根据buffer来确定。
-        this.lastSeq_ = data.seq;
-        console.log("Send data with seq: ", data.seq);
+        ///this.lastSeq_ = data.seq;
 
-        //data.type = "data";
-
+        this._relay(blob);
+    }
+    _relay(data)
+    {
         // / send to receivers
+        console.log('relay data to receivers: ', this.receivers_.size);
         for (const peer of this.receivers_.values()) {
             peer.sendData(data);
+        }
+    }
+    send(data) {        
+        ///this.lastSeq_ = data.seq;
+        ///console.log("Send data with seq: ", data.seq);
+        //data.type = "data";    
+     
+        console.log('send data: ');
+
+
+        var reader = new FileReader();
+        ///reader.οnlοad=(e)=>{        
+        reader.addEventListener("loadend", () => {
+            //reader.result是一个含有视频数据流的Blob对象
+            var buf = new Uint8Array(reader.result);
+            console.log(reader.result);    
+            if(reader.result.byteLength > 0){        //加这个判断，是因为有很多数据是空的，这个没有必要发到后台服务器，减轻网络开销，提升性能吧。                
+                this._relay(buf); 
+            }
+        });
+        //data为blob对象
+        reader.readAsArrayBuffer(data);            
+    }
+
+    _updatePusher() {
+        return;
+
+        if (!this.pusher_) {
+            if (this.backupPusher_) {
+                this.pusher_ = this.backupPusher_;
+            }
+            else if (this.partners_.length > 0) {
+                this.pusher_ = this.partners_;
+                this.partners_.delete();
+            }
+
+            if (this.pusher_) {
+                this.pusher_.sendMessage({
+                    type: "pushReq",
+                    layer: this.layerNo_,
+                    startSeq: this.lastSeq_
+                });
+            }
+        }
+        
+        if (!this.backupPusher_) {
+            if (this.partners_.length > 0) {
+                this.pusher_ = this.partners_;
+                this.partners_.delete();
+            }
+            peer.sendMessage({
+                type: "pushReq",
+                layer: this.layerNo_,
+                startSeq: this.lastSeq_
+            });
         }
     }
 

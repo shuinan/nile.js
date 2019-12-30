@@ -74,7 +74,7 @@ class Broadcaster {
         // every _recordInterval, make a new torrent file and start seeding it
         mediaRecorder.ondataavailable = function (blob) {
           // make unique no for this blob 
-          blob.seq = dataNo++;
+          //blob.seq = dataNo++;
           almBroadcaster.send(blob);          
         };
 

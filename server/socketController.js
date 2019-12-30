@@ -78,7 +78,7 @@ function socketController(server, socketLimit) {
       console.log(peerId, 'join a lalm');
      
       /// only support a lalm by now.
-      let layNo = 1;      
+      let layNo = this.peers.length;      
       socket.emit('joinResp', 'success', layNo, [...this.peers.keys()]);
 
       let pi = new PeerInfo;
