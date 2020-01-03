@@ -31,11 +31,11 @@ class PeerNode {
 
         this.simplePeer_.on("connect", () => {
             this.dataChannelIsOk_ = true;
-            this.callbacks_.onConnect && this.callbacks_.onConnect(this.peerId_);
+            this.callbacks_.onConnect && this.callbacks_.onConnect(this);           
         });
-        this.simplePeer_.on("error", () => {
+        this.simplePeer_.on("error", (err) => {
             this.dataChannelIsOk_ = false;
-            this.callbacks_.onError && this.callbacks_.onError(this.peerId_);
+            this.callbacks_.onError && this.callbacks_.onError(this, err);
         });
         this.simplePeer_.on("data", data => {
             if (data.type && data.type != "data") {
@@ -44,9 +44,14 @@ class PeerNode {
                 this.callbacks_.onMsg && this.callbacks_.onData(this, data);
             }
         });
-        this.simplePeer_.on("error", err => console.log("error", err));
+        
+        this.simplePeer_.on("close", () => {
+            this.callbacks_.onClose && this.callbacks_.onClose(this);
+        });
     }
-
+    isInitiator() {
+        return this.isInitiator_;
+    }
     getPeerId() {
         return this.peerId_;
     }
@@ -97,7 +102,7 @@ class Lalm extends EventEmitter {
             }
         */
         this.almId_;
-        this.layerNo_ = 1;
+        this.layerNo_ = 1;  // 层次的模糊计算
 
         // indicates whether this node is the root connecting to the server
         this.isRoot_;
@@ -152,7 +157,8 @@ class Lalm extends EventEmitter {
             onData: this._onPeerReceivedData.bind(this),
             onMsg: this._onPeerReceivedMessage.bind(this),
             onConnect: this._onPeerConnect.bind(this),
-            onError: this._onPeerError.bind(this)
+            onError: this._onPeerError.bind(this),
+            onClose: this._onPeerClose.bind(this)            
         };
 
         this.lastSeq_ = 0; // 收到的数据包最后的一个编号，  以后考虑中间补包的情况， 如果是0表示下发者可以从当前收包编号开始
@@ -213,27 +219,25 @@ class Lalm extends EventEmitter {
 
         this.layerNo_ = layerNo;
 
-        if (ret == "success") {
-            /// peer ....   peerInfo
-            for (const peer of members) {
-                if (!peer) {
-                    console.log("peer is invalid.");
+        if (ret == "success") {            
+            for (const peerInfo of members) {  
+                if (peerInfo.peerId == this.selfPeeId_) {
+                    console.log('Why self info!');
                     continue;
-                }
-
-                if (!this._isPeerExisted(peer)) {
+                }              
+                if (!this._isPeerExisted(peerInfo.peerId)) {
                     const peerNode = new PeerNode(
                         this.selfPeeId_,
-                        peer,
-                        layerNo - 1,    /// 先给一个，以后服务器在members中应该带上，后续交换信息时确定
+                        peerInfo.peerId,
+                        peerInfo.layerNo,
                         true,
                         this.peerCallbacks_
                     );
-                    this.candidates_.set(peer, peerNode);
+                    this.candidates_.set(peerInfo.peerId, peerNode);
 
-                    console.log("find a candidate: ", peer);
+                    console.log("Add a candidate: ", peerInfo);
                 } else {
-                    console.log("peer is already existed: ", peer);
+                    console.log("Peer is already existed: ", peerInfo);
                 }
             }
         }
@@ -244,7 +248,7 @@ class Lalm extends EventEmitter {
     }
 
     quit(callback) {
-        allback && callback();
+        callback && callback();
 
         for (const peer of this.receivers_.values()) {
             peer.sendMessage({ type: "quit" });
@@ -255,15 +259,28 @@ class Lalm extends EventEmitter {
     }
 
     _onTimeCheck() {}
-    _onPeerError(peerId, err) {}
-    _onPeerConnect(peerId) {
+
+    _onPeerClose(peer) {
+        console.log('close for user', peer.getPeerId());
+        this._peerQuit(peer);
+    }
+    _onPeerError(peer, err) {
+        console.log('error', err);        
+        this._peerQuit(peer);
+    }
+    _onPeerConnect(peer) {
+        const peerId = peer.getPeerId();
+
+        if (peer.isInitiator()) {
+            peer.sendMessage({ type: "desc", info: {layerNo: this.layerNo_} });
+        }
+
         // avoid loop
         // 先安排好，后续根据响应情况来确定是否替换； 要有超时机制
         // 发现，viewer peer connection onopen后， 对方（例如broadcast）还没有onopen，先收到对方的pushreq，后onopen
         console.log('onopenconnect, candidate size： ', this.candidates_.size);
-        if (this.candidates_.has(peerId)) {
-            const peer = this.candidates_.get(peerId);
-            if (peer.getLayerNo() < this.layerNo_) {
+        if (!this.isRoot_ && this.candidates_.has(peerId)) {        
+            if (peer.isInitiator() && (peer.getLayerNo() < this.layerNo_)) {
                 if (!this.pusher_) {
                     // peer
                     peer.sendMessage({
@@ -275,19 +292,18 @@ class Lalm extends EventEmitter {
                 } else if (!this.backupPusher_) {
                     this.backupPusher_ = peer;
                 } else {
-                    assert(!this.partners_.has(peerId));
+                   //  assert(!this.partners_.has(peerId));
                     this.partners_.set(peerId, peer);
                 }
 
                 this.candidates_.delete(peerId);
             }
 
-            console.log(
-                `A peer with id: ${peerId}, data channel is ok, my layno is ${this.layerNo_}, candidate of layno is `,
-                peer.getLayerNo()
-            );            
+            console.log('A peer with id:'+ peerId +', data channel is ok, my layno is '+this.layerNo_+', candidate of layno is '+peer.getLayerNo());            
         } else {
-            console.log("user is not existed, when user connect: ", peerId);
+            if (!this.isRoot_) {
+                console.log("user is not candicated, when user connect: ", peerId);
+            }
         }
     }
     _onPeerSignal(peerId, data) {
@@ -298,19 +314,7 @@ class Lalm extends EventEmitter {
         console.log(`Received peer message: ${msg.type} from: ${fromId}`);
         switch (msg.type) {
             case "quit":
-                if (this.pusher_ && from == this.pusher_) {
-                    this.pusher_ = this.backupPusher_;
-                } else if (this.backupPusher_ && from == this.backupPusher_) {                    
-                    this.backupPusher_ = null;
-                } else if (this.partners_.has(fromId)) {
-                    this.partners_.delete(fromId);
-                } else if (this.candidates_.has(fromId))
-                    this.candidates_.delete(fromId);
-                else if (this.receivers_.has(fromId)) {
-                    this.receivers_.delete(fromId);
-                }
-                this._updatePusher();
-
+                this._peerQuit(from);                
                 break;
 
             case "pushReq":
@@ -369,9 +373,10 @@ class Lalm extends EventEmitter {
                     case PUSH_RESP_LAYER_LOW:
                     case PUSH_RESP_NO_RESOURCE:
                         if (this.pusher_ && from == this.pusher_) {
-                            this.pusher_ = this.backupPusher_;
+                            this.pusher_ = null;
+                            this.partners_.set(fromId, this.pusher_);
                         } else if (this.backupPusher_ && from == this.backupPusher_) {
-                            this.partners_.set(from, this.backupPusher_);
+                            this.partners_.set(fromId, this.backupPusher_);
                             this.backupPusher_ = null;
                         } else {
                             console.log(
@@ -380,12 +385,14 @@ class Lalm extends EventEmitter {
                             );
                         }
 
-                        _updatePusher();
+                        this._updatePusher();
 
                         break;
                 }
                 break;
-
+            case "desc":
+                from.setLayerNo(msg.info.layerNo);
+                break;
             default:
         }
     }
@@ -402,8 +409,8 @@ class Lalm extends EventEmitter {
         // 以后考虑乱序的情况，需要根据buffer来确定。
         ///this.lastSeq_ = data.seq;
 
-        this._relay(blob);
-    }
+        this._relay(data);
+    }    
     _relay(data)
     {
         // / send to receivers
@@ -418,8 +425,7 @@ class Lalm extends EventEmitter {
         //data.type = "data";    
      
         console.log('send data: ');
-
-
+    
         var reader = new FileReader();
         ///reader.οnlοad=(e)=>{        
         reader.addEventListener("loadend", () => {
@@ -431,22 +437,39 @@ class Lalm extends EventEmitter {
             }
         });
         //data为blob对象
-        reader.readAsArrayBuffer(data);            
+        reader.readAsArrayBuffer(data);
+    }
+
+    _peerQuit(peer) {
+        const peerId = peer.getPeerId();
+        if (this.pusher_ && peer == this.pusher_) {
+            this.pusher_ = null;
+        } else if (this.backupPusher_ && peer == this.backupPusher_) {                    
+            this.backupPusher_ = null;
+        } else if (this.partners_.has(peerId)) {
+            this.partners_.delete(peerId);
+        } else if (this.candidates_.has(peerId))
+            this.candidates_.delete(peerId);
+        else if (this.receivers_.has(peerId)) {
+            this.receivers_.delete(peerId);
+        }
+        this._updatePusher();
     }
 
     _updatePusher() {
-        return;
-
         if (!this.pusher_) {
             if (this.backupPusher_) {
                 this.pusher_ = this.backupPusher_;
             }
             else if (this.partners_.length > 0) {
-                this.pusher_ = this.partners_;
-                this.partners_.delete();
+                const firstKey = this.partners_.keys().next().value;
+                this.pusher_ = this.partners_.get(firstKey);
+                this.partners_.delete(firstKey);
             }
 
             if (this.pusher_) {
+                console.log('Select a new pusher.');
+                
                 this.pusher_.sendMessage({
                     type: "pushReq",
                     layer: this.layerNo_,
@@ -455,6 +478,7 @@ class Lalm extends EventEmitter {
             }
         }
         
+        return;        
         if (!this.backupPusher_) {
             if (this.partners_.length > 0) {
                 this.pusher_ = this.partners_;

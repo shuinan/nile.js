@@ -4,7 +4,7 @@ const clientRTCConns = {};
 function PeerInfo (peerId, socket) {
   this.peerId = peerId;
   this.socket = socket;
-  this.layNo;
+  this.layerNo;
 }
 
 function socketController(server, socketLimit) {
@@ -67,24 +67,29 @@ function socketController(server, socketLimit) {
       let pi = new PeerInfo;
       pi.peerId = peerId;
       pi.socket = socket;
-      pi.layNo = 0;
+      pi.layerNo = 0;
       this.peers.set(peerId, pi);
 
       /// only support a lalm by now.
       socket.emit('createResp', 'success');
     });
     
-    socket.on('join', (peerId, almId) => {
-      console.log(peerId, 'join a lalm');
+    socket.on('join', (peerId, almId) => { 
      
       /// only support a lalm by now.
-      let layNo = this.peers.length;      
-      socket.emit('joinResp', 'success', layNo, [...this.peers.keys()]);
+      let layerNo = this.peers ? this.peers.size : 1; 
+      let peerInfo = [];
+      for (var peer of this.peers.values()) {
+          peerInfo.push({peerId: peer.peerId, layerNo: peer.layerNo});
+      }     
+      socket.emit('joinResp', 'success', layerNo, peerInfo);
+
+      console.log(peerId + 'join a lalm with layerno: ' + layerNo);
 
       let pi = new PeerInfo;
       pi.peerId = peerId;
       pi.socket = socket;
-      pi.layNo = layNo;
+      pi.layerNo = layerNo;
       this.peers.set(peerId, pi);
     });
 

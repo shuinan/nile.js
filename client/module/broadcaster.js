@@ -63,20 +63,55 @@ class Broadcaster {
       // begin using the webcam
       navigator.getUserMedia(mediaConstraints, onMediaSuccess, onMediaError);
 
+      function startRecording(stream) {
+        let options = {mimeType: 'video/webm'};
+        let mediaRecorder;
+        try {
+          mediaRecorder = new MediaRecorder(stream, options);
+        } catch (e0) {
+          console.log('Unable to create MediaRecorder with options Object: ', e0);
+          try {
+            options = {mimeType: 'video/webm,codecs=vp9'};
+            mediaRecorder = new MediaRecorder(stream, options);
+          } catch (e1) {
+            console.log('Unable to create MediaRecorder with options Object: ', e1);
+            try {
+              options = 'video/vp8'; // Chrome 47
+              mediaRecorder = new MediaRecorder(stream, options);
+            } catch (e2) {
+              alert('MediaRecorder is not supported by this browser.\n\n' +
+                'Try Firefox 29 or later, or Chrome 47 or later, ' +
+                'with Enable experimental Web Platform features enabled from chrome://flags.');
+              console.error('Exception while creating MediaRecorder:', e2);
+              return;
+            }
+          }
+        }
+        console.log('Created MediaRecorder', mediaRecorder, 'with options', options);
+        mediaRecorder.ondataavailable = function (e) {
+            // make unique no for this blob 
+            //blob.seq = dataNo++;
+            almBroadcaster.send(e.data);          
+        };
+        mediaRecorder.start(1000); // collect 100ms of data
+        console.log('MediaRecorder started', mediaRecorder);
+      }
+      
       function onMediaSuccess(stream) {
           console.log("start media.");
+          //startRecording(stream);
 
         let mediaRecorder = new MediaStreamRecorder(stream);
-        // record a blob every _recordInterval amount of time
-        mediaRecorder.start(_recordInterval);
         mediaRecorder.mimeType = 'video/webm';
-
         // every _recordInterval, make a new torrent file and start seeding it
         mediaRecorder.ondataavailable = function (blob) {
           // make unique no for this blob 
           //blob.seq = dataNo++;
           almBroadcaster.send(blob);          
         };
+        // record a blob every _recordInterval amount of time      
+        mediaRecorder.start(_recordInterval);
+
 
         // retrieve the devices that are being used to record
         videoStream = stream.getTracks();
@@ -113,6 +148,8 @@ class Broadcaster {
   createBroadcast() {
     let video = document.createElement('video');
     video.setAttribute('id', 'broadcaster');
+    video.autoplay = true
+    video.controls = true
     document.getElementById(this.ID_of_NodeToRenderVideo).appendChild(video);
   }
 }

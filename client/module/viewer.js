@@ -49,6 +49,7 @@ class Viewer {
     // create the video players on the document    
     this.createViewer();    
     this.$play = document.getElementById('viewer');
+    this.$play.autoplay = true;
             
     // this.onProgress = this.onProgress.bind(this);
 
@@ -61,9 +62,19 @@ class Viewer {
 
     this.almClient.join("demo-alm");
 
+    this.startPlay = false;
+    this.waitForPlayDatas = []
     this.almClient.on('data', (data) => {
-      this.$play.src = window.URL.createObjectURL(data);
-  
+        //if (this.startPlay) {
+        //    this.waitForPlayDatas.push(data);
+        //}
+        //else {
+            this.$play.src = window.URL.createObjectURL(data);            
+//            this.$play.muted = true;
+//            this.$play.play();
+        //    this.startPlay = true;            
+        //}      
+        
       // appends total uploaded to the value      
       this.total.uploaded = this.almClient.uploaded();
       this.total.downloaded = this.almClient.downloaded();
@@ -72,8 +83,14 @@ class Viewer {
       // setInterval(onProgress(torrent), 500);   
     });
     
+    this.$play.onended = () => {
+        if (this.waitForPlayDatas.length > 0) {
+            this.$play.src = window.URL.createObjectURL(this.waitForPlayDatas.shift());
+        }
+    };
+    
     this.almClient.on('join', ret => console.log('Join result: ', ret) );
-    this.almClient.on('error', err => console.log('Have error: ', err) );
+    this.almClient.on('error', err => console.log('Have error: ', err) );    
   }
 
   setUpInitialConnection() {
@@ -93,6 +110,10 @@ class Viewer {
   createViewer() {
     let video = document.createElement('video');
     video.setAttribute('id', 'viewer');
+    video.autoplay = true;
+    video.controls = true;
+    video.playsinline = true;
+    video.loop = true;
     document.getElementById(this.ID_of_NodeToRenderVideo).appendChild(video);
   }
 }

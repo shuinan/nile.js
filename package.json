@@ -18,7 +18,7 @@
   },
   "author": "nile.js",
   "license": "MIT",
-  "dependencies": {    
+  "dependencies": {
     "body-parser": "^1.17.1",
     "bufferutil": "^4.0.1",
     "express": "^4.15.2",
