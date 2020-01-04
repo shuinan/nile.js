@@ -110,10 +110,12 @@ class Viewer {
   createViewer() {
     let video = document.createElement('video');
     video.setAttribute('id', 'viewer');
+    video.width = 640
+    video.height = 480
     video.autoplay = true;
-    video.controls = true;
+   // video.controls = true;
     video.playsinline = true;
-    video.loop = true;
+    //video.loop = true;
     document.getElementById(this.ID_of_NodeToRenderVideo).appendChild(video);
   }
 }
