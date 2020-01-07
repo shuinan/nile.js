@@ -5,6 +5,7 @@ import MediaStreamRecorder from 'msr';
 import io from 'socket.io-client';
 import Lalm from './lalm.js';
 
+
 class Broadcaster {
   constructor(
     recordInterval, // the Interval that the webcam recording should seed each segment of the video
@@ -27,9 +28,21 @@ class Broadcaster {
 
     this.$video = document.getElementById('broadcaster');
 
+
+    this.mediaSource = new MediaSource();
+    this.sourceBuffer;
+    this.mediaSource.addEventListener('sourceopen', (event) => {
+        this.sourceBuffer = this.mediaSource.addSourceBuffer('video/webm; codecs=opus,vp8');
+        console.log('MediaSource opened, source buffer: ', this.sourceBuffer);  
+        this.sourceBuffer.mode = 'sequence';
+      });
+    this.$video.src = window.URL.createObjectURL(this.mediaSource);
+    //this.$video.play();
+
+    this.count = 0;
     this.startStream();
   }
-
+    
   /// create lalm
   startStream() {
     const _recordInterval = this.recordInterval;    
@@ -62,45 +75,55 @@ class Broadcaster {
 
       // begin using the webcam
       navigator.getUserMedia(mediaConstraints, onMediaSuccess, onMediaError);
+      
+      function startRecording(stream) {        
+        let options = {mimeType: 'video/webm;codecs=vp8'};
+        if (!MediaRecorder.isTypeSupported(options.mimeType)) {
+            console.error(`${options.mimeType} is not Supported`);
+            options = {mimeType: 'video/webm;codecs=vp9'};
+            if (!MediaRecorder.isTypeSupported(options.mimeType)) {
+                console.error(`${options.mimeType} is not Supported`);
+                options = {mimeType: 'video/webm'};
+                if (!MediaRecorder.isTypeSupported(options.mimeType)) {
+                    console.error(`${options.mimeType} is not Supported`);
+                    options = {mimeType: ''};
+                }
+            }
+        }
 
-      function startRecording(stream) {
-        let options = {mimeType: 'video/webm'};
         let mediaRecorder;
         try {
-          mediaRecorder = new MediaRecorder(stream, options);
-        } catch (e0) {
-          console.log('Unable to create MediaRecorder with options Object: ', e0);
-          try {
-            options = {mimeType: 'video/webm,codecs=vp9'};
             mediaRecorder = new MediaRecorder(stream, options);
-          } catch (e1) {
-            console.log('Unable to create MediaRecorder with options Object: ', e1);
-            try {
-              options = 'video/vp8'; // Chrome 47
-              mediaRecorder = new MediaRecorder(stream, options);
-            } catch (e2) {
-              alert('MediaRecorder is not supported by this browser.\n\n' +
-                'Try Firefox 29 or later, or Chrome 47 or later, ' +
-                'with Enable experimental Web Platform features enabled from chrome://flags.');
-              console.error('Exception while creating MediaRecorder:', e2);
-              return;
-            }
-          }
-        }
+        } catch (e) {
+            console.error('Exception while creating MediaRecorder:', e);      
+            return;
+        }           
+
+        let isKeyFrame = true;
         console.log('Created MediaRecorder', mediaRecorder, 'with options', options);
-        mediaRecorder.ondataavailable = function (e) {
+        mediaRecorder.ondataavailable = (e) => {
             // make unique no for this blob 
             //blob.seq = dataNo++;
-            almBroadcaster.send(e.data);          
+            almBroadcaster.send(isKeyFrame, e.data);
+            isKeyFrame = false;
         };
-        mediaRecorder.start(1000); // collect 100ms of data
+        mediaRecorder.start(500); // collect 100ms of data
         console.log('MediaRecorder started', mediaRecorder);
+
+        function RecordLoop(){
+            mediaRecorder.stop();
+            mediaRecorder.start(500);
+            isKeyFrame = true;
+            setTimeout(RecordLoop,500);
+        }
+        setTimeout(RecordLoop,500);
       }
+
       
       function onMediaSuccess(stream) {
           console.log("start media.");
-          //startRecording(stream);
-
+          startRecording(stream);
+/*
         let mediaRecorder = new MediaStreamRecorder(stream);
         mediaRecorder.mimeType = 'video/webm';
         // every _recordInterval, make a new torrent file and start seeding it
@@ -111,7 +134,7 @@ class Broadcaster {
         };
         // record a blob every _recordInterval amount of time      
         mediaRecorder.start(_recordInterval);
-
+*/
 
         // retrieve the devices that are being used to record
         videoStream = stream.getTracks();

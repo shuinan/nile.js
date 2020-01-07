@@ -1,1 +1,1 @@
-const viewer = new Viewer('videos');
+const viewer = new Viewer('video');

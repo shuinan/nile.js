@@ -19,6 +19,7 @@ class PeerNode {
         this.isInitiator_ = isInitiator;
         this.dataChannelIsOk_ = false;
         this.callbacks_ = callbacks;
+        this.isKeyFrame = false;
 
         this.simplePeer_ = new SimplePeer({ initiator: isInitiator });
         this.simplePeer_.on("signal", data => {
@@ -39,9 +40,13 @@ class PeerNode {
         });
         this.simplePeer_.on("data", data => {
             if (data.type && data.type != "data") {
-                this.callbacks_.onData && this.callbacks_.onMsg(this, data);
+                if (data.type == 'isKeyFrame') {
+                    this.isKeyFrame = true;
+                }
+                this.callbacks_.onMsg && this.callbacks_.onMsg(this, data);
             } else {
-                this.callbacks_.onMsg && this.callbacks_.onData(this, data);
+                this.callbacks_.onData && this.callbacks_.onData(this, this.isKeyFrame, data);
+                this.isKeyFrame = false;
             }
         });
         
@@ -396,48 +401,53 @@ class Lalm extends EventEmitter {
             default:
         }
     }
-    _onPeerReceivedData(from, data) {
+    _onPeerReceivedData(from, isKeyFrame, data) {
         // / chceck repeat;
         ///console.log(`Received data from ${from} with seq: `, blob.seq);
         console.log('received data');
 
         // / send to app; 
-        var blob = new Blob([data], {type: "video/webm"});       
-///        this.emit("data", new Blob([buf], {type:'video/webm'}));
-        this.emit("data", blob);
+        this.emit("data", isKeyFrame, data);
+        //var blob = new Blob([data], {type: "video/webm; codecs=opus,vp8"});               
+        //this.emit("data", blob);
 
         // 以后考虑乱序的情况，需要根据buffer来确定。
         ///this.lastSeq_ = data.seq;
 
-        this._relay(data);
+        this._relay(isKeyFrame, data);
     }    
-    _relay(data)
+    _relay(isKeyFrame, data)
     {
         // / send to receivers
         console.log('relay data to receivers: ', this.receivers_.size);
         for (const peer of this.receivers_.values()) {
+            if (isKeyFrame) {
+                peer.sendMessage({type: "isKeyFrame"});
+            }
             peer.sendData(data);
         }
     }
-    send(data) {        
+    send(isKeyFrame, data) {        
         ///this.lastSeq_ = data.seq;
         ///console.log("Send data with seq: ", data.seq);
         //data.type = "data";    
      
-        console.log('send data: ');
-    
-        var reader = new FileReader();
-        ///reader.οnlοad=(e)=>{        
-        reader.addEventListener("loadend", () => {
-            //reader.result是一个含有视频数据流的Blob对象
-            var buf = new Uint8Array(reader.result);
-            console.log(reader.result);    
-            if(reader.result.byteLength > 0){        //加这个判断，是因为有很多数据是空的，这个没有必要发到后台服务器，减轻网络开销，提升性能吧。                
-                this._relay(buf); 
+        console.log('send data: ');   
+        
+        this.fetchAB(data, (buf) => {             
+            this._relay(isKeyFrame, buf);
+        });        
+    }
+
+    fetchAB (file, cb) {
+        let reader = new FileReader();
+        reader.onload = function(e) {
+            console.log(e.target.result);
+            if(e.target.result.byteLength > 0) {        
+                cb(new Uint8Array(e.target.result));
             }
-        });
-        //data为blob对象
-        reader.readAsArrayBuffer(data);
+        }
+        reader.readAsArrayBuffer(file);
     }
 
     _peerQuit(peer) {
