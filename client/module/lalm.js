@@ -42,8 +42,9 @@ class PeerNode {
             if (data.type && data.type != "data") {
                 if (data.type == 'isKeyFrame') {
                     this.isKeyFrame = true;
+                } else {
+                    this.callbacks_.onMsg && this.callbacks_.onMsg(this, data);
                 }
-                this.callbacks_.onMsg && this.callbacks_.onMsg(this, data);
             } else {
                 this.callbacks_.onData && this.callbacks_.onData(this, this.isKeyFrame, data);
                 this.isKeyFrame = false;
@@ -432,7 +433,7 @@ class Lalm extends EventEmitter {
         ///console.log("Send data with seq: ", data.seq);
         //data.type = "data";    
      
-        console.log('send data: ');   
+        console.log('send data, len: ', data.size);   
         
         this.fetchAB(data, (buf) => {             
             this._relay(isKeyFrame, buf);

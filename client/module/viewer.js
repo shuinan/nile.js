@@ -173,6 +173,7 @@ class Viewer {
         video.width = 640;
         video.height = 480;
         video.autoplay = true;
+        video.controls = true;
         //    video.playsinline = true;
         document
             .getElementById(this.ID_of_NodeToRenderVideo)

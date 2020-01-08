@@ -104,37 +104,41 @@ class Broadcaster {
         mediaRecorder.ondataavailable = (e) => {
             // make unique no for this blob 
             //blob.seq = dataNo++;
+            if (e.data.size <= 1) {
+                return;
+            }
             almBroadcaster.send(isKeyFrame, e.data);
             isKeyFrame = false;
         };
-        mediaRecorder.start(500); // collect 100ms of data
+       // mediaRecorder.start(100); // collect 100ms of data
         console.log('MediaRecorder started', mediaRecorder);
 
         function RecordLoop(){
+            console.log('curr time: ', Date.now());
             mediaRecorder.stop();
-            mediaRecorder.start(500);
-            isKeyFrame = true;
-            setTimeout(RecordLoop,500);
+            mediaRecorder.start();
+            isKeyFrame = true;            
         }
-        setTimeout(RecordLoop,500);
+        window.setInterval(RecordLoop, 500);
       }
 
       
       function onMediaSuccess(stream) {
           console.log("start media.");
-          startRecording(stream);
-/*
+//          startRecording(stream);
+
         let mediaRecorder = new MediaStreamRecorder(stream);
         mediaRecorder.mimeType = 'video/webm';
         // every _recordInterval, make a new torrent file and start seeding it
         mediaRecorder.ondataavailable = function (blob) {
           // make unique no for this blob 
           //blob.seq = dataNo++;
-          almBroadcaster.send(blob);          
+          //almBroadcaster.send(blob);
+          almBroadcaster.send(true, blob);          
         };
         // record a blob every _recordInterval amount of time      
         mediaRecorder.start(_recordInterval);
-*/
+
 
         // retrieve the devices that are being used to record
         videoStream = stream.getTracks();
