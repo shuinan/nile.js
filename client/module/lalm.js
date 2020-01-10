@@ -19,7 +19,6 @@ class PeerNode {
         this.isInitiator_ = isInitiator;
         this.dataChannelIsOk_ = false;
         this.callbacks_ = callbacks;
-        this.isKeyFrame = false;
 
         this.simplePeer_ = new SimplePeer({ initiator: isInitiator });
         this.simplePeer_.on("signal", data => {
@@ -40,14 +39,9 @@ class PeerNode {
         });
         this.simplePeer_.on("data", data => {
             if (data.type && data.type != "data") {
-                if (data.type == 'isKeyFrame') {
-                    this.isKeyFrame = true;
-                } else {
-                    this.callbacks_.onMsg && this.callbacks_.onMsg(this, data);
-                }
+                this.callbacks_.onMsg && this.callbacks_.onMsg(this, data);                
             } else {
-                this.callbacks_.onData && this.callbacks_.onData(this, this.isKeyFrame, data);
-                this.isKeyFrame = false;
+                this.callbacks_.onData && this.callbacks_.onData(this, data);
             }
         });
         
@@ -372,6 +366,7 @@ class Lalm extends EventEmitter {
                 break;
 
             case "pushResp":
+                console.log('receive push response, code: ', msg.code);
                 switch (msg.code) {
                     case PUSH_RESP_OK:
                         break;
@@ -402,33 +397,30 @@ class Lalm extends EventEmitter {
             default:
         }
     }
-    _onPeerReceivedData(from, isKeyFrame, data) {
+    _onPeerReceivedData(from, data) {
         // / chceck repeat;
         ///console.log(`Received data from ${from} with seq: `, blob.seq);
         console.log('received data');
 
         // / send to app; 
-        this.emit("data", isKeyFrame, data);
+        this.emit("data", data);
         //var blob = new Blob([data], {type: "video/webm; codecs=opus,vp8"});               
         //this.emit("data", blob);
 
         // 以后考虑乱序的情况，需要根据buffer来确定。
         ///this.lastSeq_ = data.seq;
 
-        this._relay(isKeyFrame, data);
+        this._relay(data);
     }    
-    _relay(isKeyFrame, data)
+    _relay(data)
     {
         // / send to receivers
         console.log('relay data to receivers: ', this.receivers_.size);
         for (const peer of this.receivers_.values()) {
-            if (isKeyFrame) {
-                peer.sendMessage({type: "isKeyFrame"});
-            }
             peer.sendData(data);
         }
     }
-    send(isKeyFrame, data) {        
+    send(data) {        
         ///this.lastSeq_ = data.seq;
         ///console.log("Send data with seq: ", data.seq);
         //data.type = "data";    
@@ -436,7 +428,7 @@ class Lalm extends EventEmitter {
         console.log('send data, len: ', data.size);   
         
         this.fetchAB(data, (buf) => {             
-            this._relay(isKeyFrame, buf);
+            this._relay(buf);
         });        
     }
 

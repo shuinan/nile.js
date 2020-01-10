@@ -28,7 +28,7 @@ class Broadcaster {
 
     this.$video = document.getElementById('broadcaster');
 
-
+/*
     this.mediaSource = new MediaSource();
     this.sourceBuffer;
     this.mediaSource.addEventListener('sourceopen', (event) => {
@@ -38,7 +38,7 @@ class Broadcaster {
       });
     this.$video.src = window.URL.createObjectURL(this.mediaSource);
     //this.$video.play();
-
+*/
     this.count = 0;
     this.startStream();
   }
@@ -99,33 +99,30 @@ class Broadcaster {
             return;
         }           
 
-        let isKeyFrame = true;
         console.log('Created MediaRecorder', mediaRecorder, 'with options', options);
         mediaRecorder.ondataavailable = (e) => {
             // make unique no for this blob 
             //blob.seq = dataNo++;
             if (e.data.size <= 1) {
-                return;
+                console.log('data size is too litle: ', e.data.size);
+             //   return;
             }
-            almBroadcaster.send(isKeyFrame, e.data);
-            isKeyFrame = false;
+            almBroadcaster.send(e.data);            
         };
-       // mediaRecorder.start(100); // collect 100ms of data
+        mediaRecorder.start(); // collect 100ms of data
         console.log('MediaRecorder started', mediaRecorder);
 
-        function RecordLoop(){
-            console.log('curr time: ', Date.now());
-            mediaRecorder.stop();
-            mediaRecorder.start();
-            isKeyFrame = true;            
-        }
-        window.setInterval(RecordLoop, 500);
+//        function RecordLoop(){
+ //           mediaRecorder.stop();
+  //          mediaRecorder.start();            
+    //    }
+      //  window.setInterval(RecordLoop, 500);
       }
 
       
       function onMediaSuccess(stream) {
           console.log("start media.");
-//          startRecording(stream);
+  //        startRecording(stream);
 
         let mediaRecorder = new MediaStreamRecorder(stream);
         mediaRecorder.mimeType = 'video/webm';
@@ -133,8 +130,7 @@ class Broadcaster {
         mediaRecorder.ondataavailable = function (blob) {
           // make unique no for this blob 
           //blob.seq = dataNo++;
-          //almBroadcaster.send(blob);
-          almBroadcaster.send(true, blob);          
+          almBroadcaster.send(blob);          
         };
         // record a blob every _recordInterval amount of time      
         mediaRecorder.start(_recordInterval);
@@ -170,6 +166,56 @@ class Broadcaster {
         console.log('Stop broadcast.')
       })
     });
+  }
+
+  showView(data) {
+    this.waitForPlayDatas.push(data);
+
+    let that = this;
+    that.sourceBuffer.addEventListener("updateend", () => {
+        console.log("end of update.....");
+
+        if (!that.sourceBuffer.updating) {
+            //设置持续时间
+            try {
+                that.mediaSource.duration = 500; //初始加载5s
+            } catch (e) {
+                console.log(e);
+            }
+        }
+    });
+
+    if (that.$play.paused) {
+        console.log(
+            "paused, media source state: ",
+            this.mediaSource.readyState
+        );
+        //that.$play.play();
+    }
+
+    const buffered_time_limit = 2000;
+    if (that.$play.buffered.length &&
+        that.$play.buffered.end(that.$play.buffered.length - 1) - that.$play.buffered.start(0) > buffered_time_limit) {
+        console.log(
+            "clear buffer from 0 to " +
+                (that.$play.buffered.end(that.$play.buffered.length - 1) -
+                    buffered_time_limit)
+        );
+        that.sourceBuffer.remove(
+            0,
+            that.$play.buffered.end(that.$play.buffered.length - 1) -
+                buffered_time_limit
+        );
+    }
+
+    if (!that.sourceBuffer.updating) {
+    //that.fetchAB(data, buf => {
+        console.log("media source state: ", that.mediaSource.readyState);
+        console.log("data len: " + data.byteLength);
+        //that.sourceBuffer.appendBuffer(buf);
+        that.sourceBuffer.appendBuffer(this.waitForPlayDatas.shift());
+    //});
+    }
   }
 
   createBroadcast() {

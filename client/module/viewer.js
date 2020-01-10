@@ -74,15 +74,9 @@ class Viewer {
 
         this.startPlay = false;
         this.waitForPlayDatas = [];
-        this.haveKeyFrame = false;
-        this.almClient.on("data", (isKeyFrame, data) => {
-            if (!this.haveKeyFrame) {
-                this.haveKeyFrame = isKeyFrame;                
-            }
+        this.almClient.on("data", (data) => {            
             //this.$play.src = window.URL.createObjectURL(data);
-            if (this.haveKeyFrame) {
-                this.showView(data);    
-            }            
+            this.showView(data);                
 
             // appends total uploaded to the value
             this.total.uploaded = this.almClient.uploaded();
@@ -173,7 +167,7 @@ class Viewer {
         video.width = 640;
         video.height = 480;
         video.autoplay = true;
-        video.controls = true;
+        //video.controls = true;
         //    video.playsinline = true;
         document
             .getElementById(this.ID_of_NodeToRenderVideo)
