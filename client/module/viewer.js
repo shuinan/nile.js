@@ -116,7 +116,7 @@ class Viewer {
             if (!that.sourceBuffer.updating) {
                 //设置持续时间
                 try {
-                    that.mediaSource.duration = 500; //初始加载5s
+                    that.mediaSource.duration = 500000; //初始加载5s
                 } catch (e) {
                     console.log(e);
                 }

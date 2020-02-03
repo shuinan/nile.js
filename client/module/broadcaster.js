@@ -112,18 +112,14 @@ class Broadcaster {
         mediaRecorder.start(); // collect 100ms of data
         console.log('MediaRecorder started', mediaRecorder);
 
-//        function RecordLoop(){
- //           mediaRecorder.stop();
-  //          mediaRecorder.start();            
-    //    }
-      //  window.setInterval(RecordLoop, 500);
+        function RecordLoop(){
+           mediaRecorder.stop();
+            mediaRecorder.start();            
+        }
+        window.setInterval(RecordLoop, 500);
       }
 
-      
-      function onMediaSuccess(stream) {
-          console.log("start media.");
-  //        startRecording(stream);
-
+      function startStreamRecording(stream) {
         let mediaRecorder = new MediaStreamRecorder(stream);
         mediaRecorder.mimeType = 'video/webm';
         // every _recordInterval, make a new torrent file and start seeding it
@@ -134,7 +130,12 @@ class Broadcaster {
         };
         // record a blob every _recordInterval amount of time      
         mediaRecorder.start(_recordInterval);
-
+      }
+      
+      function onMediaSuccess(stream) {
+          console.log("start media.");
+  //        startStreamRecording(stream);      
+          startRecording(stream);
 
         // retrieve the devices that are being used to record
         videoStream = stream.getTracks();
