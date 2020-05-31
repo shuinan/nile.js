@@ -57,6 +57,19 @@ class Viewer {
                 this.sourceBuffer
             );
             this.sourceBuffer.mode = "sequence";
+
+            this.sourceBuffer.addEventListener("updateend", () => {
+                console.log("end of update.....");
+    
+                if (!this.sourceBuffer.updating) {
+                    //设置持续时间  ?
+                    try {
+                        this.mediaSource.duration = 500000; //初始加载5s
+                    } catch (e) {
+                        console.log(e);
+                    }
+                }
+            });
         });
         this.$play.src = window.URL.createObjectURL(this.mediaSource);
         //this.$play.play();
@@ -109,51 +122,42 @@ class Viewer {
     showView(data) {
         this.waitForPlayDatas.push(data);
 
-        let that = this;
-        that.sourceBuffer.addEventListener("updateend", () => {
-            console.log("end of update.....");
-
-            if (!that.sourceBuffer.updating) {
-                //设置持续时间
-                try {
-                    that.mediaSource.duration = 500000; //初始加载5s
-                } catch (e) {
-                    console.log(e);
-                }
-            }
-        });
-
-        if (that.$play.paused) {
+        if (this.$play.paused) {
             console.log(
                 "paused, media source state: ",
                 this.mediaSource.readyState
             );
-            //that.$play.play();
+            this.$play.play();
         }
 
         const buffered_time_limit = 2000;
-        if (that.$play.buffered.length &&
-            that.$play.buffered.end(that.$play.buffered.length - 1) - that.$play.buffered.start(0) > buffered_time_limit) {
+        if (this.$play.buffered.length &&
+            this.$play.buffered.end(this.$play.buffered.length - 1) - this.$play.buffered.start(0) > buffered_time_limit) {
             console.log(
                 "clear buffer from 0 to " +
-                    (that.$play.buffered.end(that.$play.buffered.length - 1) -
+                    (this.$play.buffered.end(this.$play.buffered.length - 1) -
                         buffered_time_limit)
             );
-            that.sourceBuffer.remove(
+            this.sourceBuffer.remove(
                 0,
-                that.$play.buffered.end(that.$play.buffered.length - 1) -
+                this.$play.buffered.end(this.$play.buffered.length - 1) -
                     buffered_time_limit
             );
         }
 
-        if (!that.sourceBuffer.updating) {
-        //that.fetchAB(data, buf => {
-            console.log("media source state: ", that.mediaSource.readyState);
-            console.log("data len: " + data.byteLength);
-            //that.sourceBuffer.appendBuffer(buf);
-            that.sourceBuffer.appendBuffer(this.waitForPlayDatas.shift());
+        if (this.mediaSource.readyState === "open" && this.sourceBuffer && this.sourceBuffer.updating === false) {            
+            //this.sourceBuffer.appendBuffer(this.waitForPlayDatas.shift());
+            this.sourceBuffer.appendBuffer(data);
+            
+        //this.fetchAB(data, buf => {
+            console.log("media source state: ", this.mediaSource.readyState);
+            console.log("data len: ", data.byteLength);
+            console.log("reserve data len: ", this.waitForPlayDatas.length)
+            //this.sourceBuffer.appendBuffer(buf);        
         //});
-        }
+        } else {
+            console.log("not appdend data, reserve data len: ", this.waitForPlayDatas.length)
+        }        
     }
 
     // return the totals upload/download
@@ -166,9 +170,12 @@ class Viewer {
         video.setAttribute("id", "viewer");
         video.width = 640;
         video.height = 480;
-        video.autoplay = true;
-        //video.controls = true;
-        //    video.playsinline = true;
+                        
+        video.controls = true
+        video.autoplay = true // for chrome
+        //video.play() // for firefox                
+        //video.playsinline = true;
+
         document
             .getElementById(this.ID_of_NodeToRenderVideo)
             .appendChild(video);

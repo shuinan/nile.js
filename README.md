@@ -1,3 +1,6 @@
+build: gulp -w
+run: npm start
+
 # nile.js
 A tool for scalable peer-to-peer video streaming using WebTorrent.
 
